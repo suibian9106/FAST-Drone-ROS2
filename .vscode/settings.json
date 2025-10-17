@@ -2,6 +2,10 @@
     "files.associations": {
         "*.md": "markdown",
         "vector": "cpp",
-        "complex": "cpp"
-    }
+        "complex": "cpp",
+        "chrono": "cpp",
+        "dense": "cpp",
+        "functional": "cpp"
+    },
+    "cmake.sourceDirectory": "/home/suibian9106/mycodes/FAST-Drone-ROS2/src/planner/bspline_opt"
 }

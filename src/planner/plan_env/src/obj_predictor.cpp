@@ -33,7 +33,7 @@ namespace fast_planner {
 // int ObjHistory::skip_num_;
 // ros::Time ObjHistory::global_start_time_;
 
-void ObjHistory::init(int id, int skip_num, int queue_size, ros::Time global_start_time) {
+void ObjHistory::init(int id, int skip_num, int queue_size, rclcpp::Time global_start_time) {
   clear();
   skip_ = 0;
   obj_idx_ = id;
@@ -42,13 +42,14 @@ void ObjHistory::init(int id, int skip_num, int queue_size, ros::Time global_sta
   global_start_time_ = global_start_time;
 }
 
-void ObjHistory::poseCallback(const geometry_msgs::PoseStampedConstPtr& msg) {
+void ObjHistory::poseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+  
   ++skip_;
   if (skip_ < skip_num_) return;
 
   Eigen::Vector4d pos_t;
   pos_t(0) = msg->pose.position.x, pos_t(1) = msg->pose.position.y, pos_t(2) = msg->pose.position.z;
-  pos_t(3) = (ros::Time::now() - global_start_time_).toSec();
+  pos_t(3) = (_clock.now() - global_start_time_).seconds();
 
   history_.push_back(pos_t);
   // cout << "idx: " << obj_idx_ << "pos_t: " << pos_t.transpose() << endl;
@@ -64,7 +65,7 @@ void ObjHistory::poseCallback(const geometry_msgs::PoseStampedConstPtr& msg) {
 ObjPredictor::ObjPredictor(/* args */) {
 }
 
-ObjPredictor::ObjPredictor(ros::NodeHandle& node) {
+ObjPredictor::ObjPredictor(std::shared_ptr<rclcpp::Node>& node) {
   this->node_handle_ = node;
 }
 
@@ -74,12 +75,21 @@ ObjPredictor::~ObjPredictor() {
 void ObjPredictor::init() {
   /* get param */
   int queue_size, skip_nums;
-
-  node_handle_.param("prediction/obj_num", obj_num_, 0);
-  node_handle_.param("prediction/lambda", lambda_, 1.0);
-  node_handle_.param("prediction/predict_rate", predict_rate_, 1.0);
-  node_handle_.param("prediction/queue_size", queue_size, 10);
-  node_handle_.param("prediction/skip_nums", skip_nums, 1);
+  // node_handle_.param("prediction/obj_num", obj_num_, 0);
+  // node_handle_.param("prediction/lambda", lambda_, 1.0);
+  // node_handle_.param("prediction/predict_rate", predict_rate_, 1.0);
+  // node_handle_.param("prediction/queue_size", queue_size, 10);
+  // node_handle_.param("prediction/skip_nums", skip_nums, 1);
+  node_handle_->declare_parameter<int>("prediction/obj_num",0);
+  node_handle_->declare_parameter<double>("prediction/lambda",1.0);
+  node_handle_->declare_parameter<double>("prediction/predict_rate",1.0);
+  node_handle_->declare_parameter<int>("prediction/queue_size",10);
+  node_handle_->declare_parameter<int>("prediction/skip_nums",1);
+  node_handle_->get_parameter("prediction/obj_num",obj_num_);
+  node_handle_->get_parameter("prediction/lambda",lambda_);
+  node_handle_->get_parameter("prediction/predict_rate",predict_rate_);
+  node_handle_->get_parameter("prediction/queue_size",queue_size);
+  node_handle_->get_parameter("prediction/skip_nums",skip_nums);
 
   predict_trajs_.reset(new vector<PolynomialPrediction>);
   predict_trajs_->resize(obj_num_);
@@ -91,27 +101,37 @@ void ObjPredictor::init() {
     scale_init_[i] = false;
 
   /* subscribe to pose */
-  ros::Time t_now = ros::Time::now();
+  rclcpp::Time t_now = _clock.now();
   for (int i = 0; i < obj_num_; i++) {
     shared_ptr<ObjHistory> obj_his(new ObjHistory);
 
     obj_his->init(i, skip_nums, queue_size, t_now);
     obj_histories_.push_back(obj_his);
-
-    ros::Subscriber pose_sub = node_handle_.subscribe<geometry_msgs::PoseStamped>(
-        "/dynamic/pose_" + std::to_string(i), 10, &ObjHistory::poseCallback, obj_his.get());
+  //TAG 这里，类内订阅一个话题，并且指定回调函数为类内成员变量 的 一个成员函数
+  //TAG 另外一般放在回调函数的那个地方的东西就是函数地址（就是没有括号的那个），那这里用到lamba表达式等效于一个匿名函数的地址
+    // ros::Subscriber pose_sub = node_handle_.subscribe<geometry_msgs::msg::PoseStamped>(
+    //     "/dynamic/pose_" + std::to_string(i), 10, &ObjHistory::poseCallback, obj_his.get());    
+    auto pose_sub = node_handle_->create_subscription<geometry_msgs::msg::PoseStamped>(
+    "/dynamic/pose_" + std::to_string(i), 10,[obj_his](const geometry_msgs::msg::PoseStamped::SharedPtr msg) 
+    {
+      obj_his->poseCallback(msg);
+    });
 
     pose_subs_.push_back(pose_sub);
 
     predict_trajs_->at(i).setGlobalStartTime(t_now);
   }
 
-  marker_sub_ = node_handle_.subscribe<visualization_msgs::Marker>("/dynamic/obj", 10,
-                                                                   &ObjPredictor::markerCallback, this);
+  // marker_sub_ = node_handle_.subscribe<visualization_msgs::msg::Marker>("/dynamic/obj", 10,
+  //                                                                  &ObjPredictor::markerCallback, this);
+  marker_sub_ = node_handle_->create_subscription<visualization_msgs::msg::Marker>("/dynamic/obj", 10, 
+                                std::bind(&ObjPredictor::markerCallback, this, std::placeholders::_1));
 
   /* update prediction */
-  predict_timer_ =
-      node_handle_.createTimer(ros::Duration(1 / predict_rate_), &ObjPredictor::predictCallback, this);
+  // predict_timer_ =
+  //     node_handle_.createTimer(ros::Duration(1 / predict_rate_), &ObjPredictor::predictCallback, this);
+  predict_timer_ = node_handle_->create_wall_timer(std::chrono::milliseconds(int(1000/predict_rate_)), std::bind( &ObjPredictor::predictCallback, this));
+
 }
 
 ObjPrediction ObjPredictor::getPredictionTraj() {
@@ -183,12 +203,13 @@ void ObjPredictor::predictPolyFit() {
   }
 }
 
-void ObjPredictor::predictCallback(const ros::TimerEvent& e) {
+void ObjPredictor::predictCallback() {
   // predictPolyFit();
   predictConstVel();
 }
 
-void ObjPredictor::markerCallback(const visualization_msgs::MarkerConstPtr& msg) {
+void ObjPredictor::markerCallback(const visualization_msgs::msg::Marker::SharedPtr msg) {
+  
   int idx = msg->id;
   (*obj_scale_)[idx](0) = msg->scale.x;
   (*obj_scale_)[idx](1) = msg->scale.y;
@@ -202,7 +223,7 @@ void ObjPredictor::markerCallback(const visualization_msgs::MarkerConstPtr& msg)
   }
 
   if (finish_num == obj_num_) {
-    marker_sub_.shutdown();
+    marker_sub_.reset();
   }
 }
 

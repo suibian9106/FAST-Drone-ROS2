@@ -1,111 +1,92 @@
 cmake_minimum_required(VERSION 3.5)
 project(plan_env)
 
-# Default to C99
-if(NOT CMAKE_C_STANDARD)
-  set(CMAKE_C_STANDARD 99)
-endif()
+set(CMAKE_BUILD_TYPE "Release")
+ADD_COMPILE_OPTIONS(-std=c++11 )
+ADD_COMPILE_OPTIONS(-std=c++14 )
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
 
-# Default to C++14
-if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
-endif()
+find_package(OpenCV REQUIRED)
 
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
 
-# find dependencies
 find_package(ament_cmake REQUIRED)
-# uncomment the following section in order to fill in
-# further dependencies manually.
-# find_package(<dependency> REQUIRED)
-
 find_package(rclcpp REQUIRED)
-find_package(rclpy REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(message_filters REQUIRED)
+find_package(nav_msgs REQUIRED)
+set(MY_DEPENDENCIES
+  rclcpp
+  std_msgs
+  visualization_msgs
+  cv_bridge
+  message_filters
+  nav_msgs
+  # PCL
+)
+# find_package(catkin REQUIRED COMPONENTS
+#   roscpp
+#   rospy
+#   std_msgs
+#   visualization_msgs
+#   cv_bridge
+#   message_filters
+# )
 
-find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL 1.7 REQUIRED)
 
-# 包含目录
-include_directories(
-  SYSTEM 
-  include 
-  ${Eigen3_INCLUDE_DIRS} 
-  ${PCL_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIRS}
+# catkin_package(
+#  INCLUDE_DIRS include
+#  LIBRARIES plan_env
+#  CATKIN_DEPENDS roscpp std_msgs
+#  DEPENDS OpenCV
+# #  DEPENDS system_lib
+# )
+
+include_directories( 
+    SYSTEM 
+    include 
+    ${catkin_INCLUDE_DIRS}
+    ${Eigen3_INCLUDE_DIRS} 
+    ${PCL_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
 )
 
-# 创建库
-add_library(plan_env 
-  src/grid_map.cpp 
-  src/raycast.cpp
-  src/obj_predictor.cpp
-)
-
-# 链接库依赖
-target_link_libraries(plan_env
-  ${rclcpp_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${OpenCV_LIBS}
-  ${cv_bridge_LIBRARIES}
-  ${message_filters_LIBRARIES}
-)
-
-# 添加ROS2特定的依赖管理
+link_directories(${PCL_LIBRARY_DIRS})
+#TAG 这里非常有意思，三个没有main函数的cpp文件共同编译在一起，作为代码库（在ros2中被当做功能包如msg引入使用）使用
+add_library( plan_env SHARED
+    src/grid_map.cpp 
+    src/raycast.cpp
+    src/obj_predictor.cpp 
+    )
 ament_target_dependencies(plan_env
-  rclcpp
-  std_msgs
-  visualization_msgs
-  cv_bridge
-  message_filters
+${MY_DEPENDENCIES} 
 )
+target_link_libraries( plan_env
+    ${PCL_LIBRARIES}
+    ${OpenCV_LIBS}
+    )  
 
-# 创建可执行文件
 add_executable(obj_generator
-  src/obj_generator.cpp 
+    src/obj_generator.cpp 
 )
-
-# 链接可执行文件依赖
-target_link_libraries(obj_generator
-  ${rclcpp_LIBRARIES}
-)
-
 ament_target_dependencies(obj_generator
-  rclcpp
-  std_msgs
+${MY_DEPENDENCIES} 
 )
 
-# 安装目标
 install(TARGETS
-  plan_env
-  obj_generator
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
+    plan_env
+    obj_generator
+  DESTINATION lib
 )
-
-# 安装包含目录
-install(DIRECTORY include/
-  DESTINATION include/
-)
-
-# 导出依赖
-ament_export_include_directories(include)
-ament_export_libraries(plan_env)
-ament_export_dependencies(
-  rclcpp
-  std_msgs
-  visualization_msgs
-  cv_bridge
-  message_filters
-)
-
+# install(DIRECTORY launch
+#   DESTINATION share/${PROJECT_NAME}
+# )
+# install(DIRECTORY config
+#   DESTINATION share/${PROJECT_NAME}/#把存yaml文件的文件夹config移到share
+# )
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
@@ -116,5 +97,5 @@ if(BUILD_TESTING)
   #set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
-
+##1.自身工程的.h库
 ament_package()
