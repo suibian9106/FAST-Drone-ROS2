@@ -81,10 +81,10 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# 安装包含目录（如果有头文件需要被其他包使用）
-install(DIRECTORY include/
-  DESTINATION include/
-)
+# # 安装包含目录（如果有头文件需要被其他包使用）
+# install(DIRECTORY include/
+#   DESTINATION include/
+# )
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
 )

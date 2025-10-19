@@ -1,3 +1,64 @@
+## realsense 安装
+```bash
+#依赖
+git clone -b v2.51.1 https://github.com/IntelRealSense/librealsense.git
+sudo apt-get install guvcview git libssl-dev libusb-1.0-0-dev pkg-config libgtk-3-dev -y
+sudo apt-get install libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev -y
+
+#安装权限脚本
+cd librealsense
+sudo cp config/99-realsense-libusb.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules && udevadm trigger 
+
+#编译
+cd librealsense
+mkdir build
+cd build
+cmake ../ -DFORCE_RSUSB_BACKEND=true -DBUILD_PYTHON_BINDINGS=false -DCMAKE_BUILD_TYPE=release -DBUILD_EXAMPLES=true -DBUILD_GRAPHICAL_EXAMPLES=true
+make
+sudo make install
+
+```
+
+
+## ROS2 安装
+
+* **设置编码**
+```bash
+$ sudo apt update && sudo apt install locales
+$ sudo locale-gen en_US en_US.UTF-8
+$ sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 
+$ export LANG=en_US.UTF-8
+```
+* **添加源**
+```bash
+$ sudo apt update && sudo apt install curl gnupg lsb-release 
+$ sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg 
+$ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(source /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+```
+
+* **安装ROS2**
+```bash
+$ sudo apt update
+$ sudo apt upgrade
+$ sudo apt install ros-foxy-desktop
+```
+* **设置环境变量**
+```bash
+sudo vim ~/.bashrc 
+##在文件最后添加以下内容，使ROS1和ROS2共存
+unset ROS_DISTRO
+unset ROS_PACKAGE_PATH
+unset ROS_VERSION
+echo "ros noetic(1) or ros2 foxy(2)?"
+read edition
+if [ "$edition" -eq "1" ];then
+  source /opt/ros/noetic/setup.bash
+else
+  source /opt/ros/foxy/setup.bash
+fi
+```
+
 ## px4ctrl话题服务
 
 根据代码分析，这个px4ctrl ROS2节点的通信方式如下：
