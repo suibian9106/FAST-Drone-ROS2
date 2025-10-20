@@ -108,10 +108,10 @@ ros2 launch ego_planner rviz.launch.py
 
 ```shell
 sudo chmod 777 /dev/ttyACM0 & sleep 2;
-ros2 launch realsense2_camera rs_camera.launch enable_infra1:=true enable_infra2:=true & sleep 10;
+ros2 launch realsense2_camera rs_launch.py enable_infra1:=true enable_infra2:=true & sleep 10;
 ros2 run mavros mavros_node --ros-args --param fcu_url:=/dev/ttyACM0:57600 & sleep 10;
-ros2 launch vins fast_drone_250.launch.py
-#ros2 run vins vins_node install/vins/share/vins/config/fast_drone_250.yaml
+# ros2 launch vins fast_drone_250.launch.py
+ros2 run vins vins_node install/vins/share/vins/config/fast_drone_250.yaml
 wait;
 ```
 
