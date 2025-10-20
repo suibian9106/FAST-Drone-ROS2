@@ -58,6 +58,137 @@ else
   source /opt/ros/foxy/setup.bash
 fi
 ```
+## 3. 实验前的参数设置
+
+### 3.1 VINS 参数设置
+
+```shell
+cd ./src/realflight_modules/VINS_Fusion/config/
+ros2 topic echo /camera/infra1/camera_info # 把其中的K矩阵中的fx,fy,cx,cy填入left.yaml和right.yaml
+mkdir /home/coolpi/vins_output # vins输出的结果会存储在这里
+```
+
+修改 fast-drone-250.yaml 的 body_T_cam0 和 body_T_cam1 的 data 矩阵的第四列为你的无人机上的相机相对于飞控的实际外参，单位为米，顺序为 x/y/z，第四项是 1，不用改
+
+```yaml
+body_T_cam0: !!opencv-matrix
+  rows: 4
+  cols: 4
+  dt: d
+  data: [0, 0, 1, 0.02, -1, 0, 0, 0.02, 0, -1, 0, 0.02, 0, 0, 0, 1]
+body_T_cam1: !!opencv-matrix
+  rows: 4
+  cols: 4
+  dt: d
+  data: [0, 0, 1, 0.02, -1, 0, 0, -0.03, 0, -1, 0, 0.02, 0, 0, 0, 1]
+```
+
+### 3.2 VINS 外参标定
+
+```shell
+sh shfiles/rspx4.sh
+rostopic echo /vins_fusion/imu_propagate
+```
+
+- 拿起飞机沿着场地尽量缓慢地行走，场地内光照变化不要太大，灯光不要太暗，不要使用会频闪的光源，尽量多放些杂物来增加 VINS 用于匹配的特征点
+- 把`vins_output/extrinsic_parameter.txt`里的内容替换到`fast-drone-250.yaml`的`body_T_cam0`和`body_T_cam1`
+  重复上述操作直到走几圈后 VINS 的里程计数据偏差收敛到满意值（一般在 0.3 米内）
+
+### 3.3 ego-planner 验证
+
+```shell
+sh shfiles/rspx4.sh
+ros2 launch ego_planner single_run_in_exp.launch.py
+ros2 launch ego_planner rviz.launch.py
+```
+
+## 3. 启动 Fast Drone
+
+**:skull: 注意默认源码编译的 realsense ros wrapper 是不会拉取灰度图像流的，所以需要在启动 realsense 节点语句最后增加`enable_infra1:=true enable_infra2:=true`**
+
+```shell
+sudo chmod 777 /dev/ttyACM0 & sleep 2;
+ros2 launch realsense2_camera rs_camera.launch enable_infra1:=true enable_infra2:=true & sleep 10;
+ros2 run mavros mavros_node --ros-args --param fcu_url:=/dev/ttyACM0:57600 & sleep 10;
+ros2 launch vins fast_drone_250.launch.py
+#ros2 run vins vins_node install/vins/share/vins/config/fast_drone_250.yaml
+wait;
+```
+
+**确认 IMU 频率接近 200hz**
+
+```shell
+ros2 topic hz /mavros/imu/data_raw
+```
+
+**如果没有达到，执行下面的命令**
+
+```shell
+# 设置EXTENDED_STATUS数据流,5000us对应200HZ
+ros2 service call /mavros/cmd/command mavros_msgs/srv/CommandLong "{
+  command: 511,
+  param1: 105,
+  param2: 5000,
+  param3: 0,
+  param4: 0,
+  param5: 0,
+  param6: 0,
+  param7: 0
+}"
+
+# 设置SCALED_IMU数据流
+ros2 service call /mavros/cmd/command mavros_msgs/srv/CommandLong "{
+  command: 511,
+  param1: 31,
+  param2: 5000,
+  param3: 0,
+  param4: 0,
+  param5: 0,
+  param6: 0,
+  param7: 0
+}"
+```
+
+## 4. 实验
+
+### 4.0 实验前的准备
+
+```shell
+sh shfiles/rspx4.sh
+ros2 topic echo /vins_fusion/imu_propagate
+```
+
+- 拿起飞机进行缓慢的小范围晃动，放回原地后确认没有太大误差
+- 遥控器 5 通道拨到内侧，六通道拨到下侧，油门打到中位
+
+### 4.1 auto takeoff + hover + auto land
+
+- 保证`shfiles/rspx4.sh`脚本已经在运行
+
+```shell
+ros2 launch px4ctrl run_ctrl.launch.py
+sh shfiles/takeoff.sh
+# 等待无人机悬停一会后
+sh shfiles/land.sh
+```
+
+**注意：如果飞机螺旋桨开始旋转，但无法起飞，说明 hover_percent 参数过小；如果飞机有明显飞过 1 米高，再下降的样子，说明 hover_percent 参数过大**
+
+### 4.2 auto takeoff + hover + auto land + auto fly
+
+- 保证`shfiles/rspx4.sh`脚本已经在运行
+
+```shell
+ros2 launch px4ctrl run_ctrl.launch.py
+sh shfiles/takeoff.sh
+ros2 launch ego_planner single_run_in_exp.launch.py
+sh shfiles/record.sh
+# 执行我们自己的指点飞行
+ros2 run ndsl_control ndsl_control_node
+# 等待指点飞行结束
+sh shfiles/land.sh
+```
+
 
 ## px4ctrl话题服务
 

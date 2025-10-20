@@ -5,18 +5,14 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     # 获取vins功能包的共享目录路径
-    vins_pkg_path = get_package_share_directory('vins')
-    config_path = os.path.join(vins_pkg_path, './config/fast_drone_250.yaml')
-    
-    # 确保使用绝对路径
-    config_path = os.path.abspath(config_path)
+    vins_para_path=os.path.join(get_package_share_directory('vins'), 'config','fast_drone_250.launch.py')
     
     vins_node = Node(
         package='vins',
         executable='vins_node',
         name='vins_fusion',
         output='screen',
-        arguments=[config_path]
+        parameters=[vins_para_path,]
     )
     
     # 被注释掉的loop_fusion节点（如需使用，取消注释）

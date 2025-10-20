@@ -1,0 +1,1 @@
+ros2 topic pub -1 /px4ctrl/takeoff_land quadrotor_msgs/msg/TakeoffLand "takeoff_land_cmd: 2"
